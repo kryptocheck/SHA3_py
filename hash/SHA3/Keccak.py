@@ -49,6 +49,9 @@ class Keccak:
         
         input_buffer:
             Preprocessed input waiting for processing
+        
+        unfinished_byte:
+            Input that is not ready for preprocessing yet
 
         input_format:
             Format of input data. Possible values:
@@ -169,6 +172,7 @@ class Keccak:
 
         self._input_format: str = input_format
         self._input_buffer: list[Literal[0,1]] = []
+        self._unfinished_byte: str | list[Literal[0,1]]  = ""
 
         self.output: str = ""
 
@@ -237,20 +241,61 @@ class Keccak:
 
         self._finalize_input_buffer()
 
+        file = None
+        if self._output_intermediate_values:
+            file = open("intermediate_values.txt", "w")
 
+
+        permutation_count = 0
         while self._input_buffer:
             self._merge_data_into_state_array()
-            self._compute_all_rounds()
+            if file:
+                file.write(f"Permutation {permutation_count}\n")
+                permutation_count += 1
 
-        self._extract_result()
+            self._compute_all_rounds(file)
+
+
+
+        if file:
+            file.write("Squeezing output. \n")
+
+        result_array = []
+
+        result_array = self._extract_result(result_array)
         if self._output_length > 0:
-            while len(self.output) < self._output_length//8:
-                self._extract_result()
+            while len(result_array) < self._output_length:
+                self._compute_all_rounds(file)
+                result_array = self._extract_result(result_array)
+                if file:
+                    file.write(f"Permutation {permutation_count}\n")
+                    permutation_count += 1
 
-            self.output = self.output[:self._output_length//8]
+        self._compute_output(result_array)
+
+        if file:
+            file.close()
 
         self._finalized = True
         return self.output
+
+    def _compute_output(self,
+                        result_array: list[Literal[0, 1]]
+                        )-> None:
+        """
+        Extracts result of required length and transform it into hexstring and writes in into self.output.
+        Args:
+            result_array:
+                Prepared hexstring
+        """
+
+        if self._output_length:
+            result_array = result_array[:self._output_length]
+        else:
+            result_array = result_array[:self._d]
+        self.output = self.b2h(result_array)
+
+
 
     def _initialize_empty_array(self
                                 ) -> list[list[list[Literal[0,1]]]]:
@@ -307,6 +352,14 @@ class Keccak:
                     self._input_buffer += self.h2b(hex_data)
 
                 case "base64":
+                    input_data = self._unfinished_byte + input_data
+                    self._unfinished_byte = ""
+
+                    modcheck = len(input_data) % 4
+                    if modcheck != 0:
+                        self._unfinished_byte = input_data[-modcheck:]
+                        input_data = input_data[:-modcheck]
+
                     hex_data = b64decode(input_data).hex()
                     self._input_buffer += self.h2b(hex_data)
 
@@ -392,15 +445,19 @@ class Keccak:
 
         file.write("\n")
 
-    def _compute_all_rounds(self
+    def _compute_all_rounds(self,
+                            file: IO | None = None
                 ) -> None:
         """
         Performs all rounds of Keccak-p permutation (sponge).
 
-        """
-        if self._output_intermediate_values:
-            file = open("intermediate_values.txt", "w")
+        Args:
+            file:
+                Handle of file to output intermediate values or None.
 
+        """
+
+        if self._output_intermediate_values:
             for round_index in range(self._rounds):
                 self._write_state_array(file, f"Round {round_index} Before algorithm 1 ")
                 self._algorithm_1()
@@ -417,11 +474,11 @@ class Keccak:
 
         else:
             for round_index in range(self._rounds):
-                self._algorithm_1_v2()
-                self._algorithm_2_v2()
-                self._algorithm_3_v2()
-                self._algorithm_4_v2()
-                self._algorithm_5_v2(round_index)
+                self._algorithm_1()
+                self._algorithm_2()
+                self._algorithm_3()
+                self._algorithm_4()
+                self._algorithm_5(round_index)
 
 
     def _finalize_input_buffer(self
@@ -431,52 +488,51 @@ class Keccak:
 
         """
 
+        if self._unfinished_byte:
+            raise ValueError(f"Some data could not be processed: {self._unfinished_byte}")
+
         self._input_buffer += self._domain_separation_bits
         if self.padding_algorithm:
-            self._input_buffer += self.padding_algorithm(self._r, len(self._input_buffer))
+            self.padding_algorithm(self)
 
         if len(self._input_buffer) % self._r != 0:
             raise ValueError(f"message not properly padded: input_buffer length = {len(self._input_buffer)}, r = {self._r} ")
 
-    def _extract_result(self
-                    )-> None:
+    def _extract_result(self,
+                        result_array: list[Literal[0, 1]]
+                    )-> list[Literal[0, 1]]:
         """
-        Extracts result of specified length from state array and sets self.output value.
+        Extracts result of specified length from state array.
+
+        Args:
+            result_array:
+                Result array being prepared.
+
+        Return:
+            Result array with another round processed.
 
         """
 
-        result_array = []
+        new_result = []
+
         pos = 0
-        while len(result_array) <= self._d:
-            result_array += self._state_array[pos % 5][pos // 5]
+        while len(new_result) <= self._r:
+            new_result += self._state_array[pos % 5][pos // 5]
             pos += 1
 
-        result_array = result_array[:self._d]
+        new_result = new_result[:self._r]
 
-        self.output += self.b2h(result_array)
+        return result_array + new_result
 
-
-    @staticmethod
-    def pad10star1(block_size: int,
-                   message_length: int
-                   ) -> list[Literal[0,1]]:
+    def pad10star1(self
+                   ) -> None:
         """
         Padding algorithm 10*1 as defined in chapter 5.1.
 
-        Args:
-            block_size:
-                expected multiple of block size
-
-            message_length:
-                current message length
-
-        Returns:
-            list containing padding bits
-
         """
 
-        j = (-message_length - 2) % block_size
-        return [1] + [0]*j + [1]
+        j = (-len(self._input_buffer) - 2) % self._r
+        self._input_buffer += [1] + [0]*j + [1]
 
 
     @staticmethod
@@ -764,8 +820,36 @@ class Keccak:
             self._state_array[0][0][z] = self.xor(self._state_array[0][0][z], RC[z])
 
 
-    def _algorithm_1_v2(self
-                        ) -> None:
+
+
+class KeccakV2(Keccak):
+    def __init__(self,
+                 b: int,
+                 rounds: int,
+                 d: int,
+                 c: int,
+                 input_data: str | bytes | list[Literal[0, 1]] = "",
+                 input_format: str = "string",
+                 domain_separation_bits: list[Literal[0, 1]] = None,
+                 padding_algorithm: callable = None,
+                 output_length: int = 0,
+                 output_intermediate_values: bool = False,
+                 nist_format: bool = False
+                 ) -> None:
+        super().__init__(b=b,
+                         rounds=rounds,
+                         d=d,
+                         c=c,
+                         input_data=input_data,
+                         input_format=input_format,
+                         domain_separation_bits=domain_separation_bits,
+                         padding_algorithm=padding_algorithm,
+                         output_length=output_length,
+                         output_intermediate_values=output_intermediate_values,
+                         nist_format=nist_format)
+
+    def _algorithm_1(self
+                     ) -> None:
         """
                 Alternative version of algorithm θ.
                 Precomputes parity values for all columns and then do in-place XOR
@@ -805,8 +889,8 @@ class Keccak:
                 for z in range(self._w):
                     self._state_array[x][y][z] = self.xor(self._state_array[x][y][z], column_parity[(x - 1) % 5][z], column_parity[(x + 1) % 5][(z - 1) % self._w])
 
-    def _algorithm_2_v2(self
-                        ) -> None:
+    def _algorithm_2(self
+                     ) -> None:
         """
         Alternative version of algorithm ρ
         Uses precomputed values for all columns offset
@@ -826,8 +910,8 @@ class Keccak:
             offset = -(offset_table[t] % self._w)
             self._state_array[x][y] = self._state_array[x][y][offset:] + self._state_array[x][y][:offset]
 
-    def _algorithm_3_v2(self
-                        ) -> None:
+    def _algorithm_3(self
+                     ) -> None:
         """
         Alternative version of algorithm π.
         Uses precomputed permutation table so can be processed in-place.
@@ -848,8 +932,8 @@ class Keccak:
         self._state_array[1][3] = start
 
 
-    def _algorithm_4_v2(self
-                        ) -> None:
+    def _algorithm_4(self
+                     ) -> None:
         """
         Alternative version of algorithm χ
         State is processed in-place.
@@ -868,9 +952,9 @@ class Keccak:
                 self._state_array[4][y][z] = self.xor(self._state_array[4][y][z], (
                         (first_x + 1) * second_x))
 
-    def _algorithm_5_v2(self,
-                        ir: int
-                        ) -> None:
+    def _algorithm_5(self,
+                     ir: int
+                     ) -> None:
         """
         Alternative version of algorithm ι
         Uses precomputed table.
@@ -985,35 +1069,100 @@ class KeccakV3(Keccak):
                             self._current_pos = 0
                             self._input_buffer.append(0)
 
+                case "hexstring":
+                    input_data = input_data.replace(" ","")
+                    while input_data:
+                        c = input_data[:2]
+                        input_data = input_data[2:]
+
+                        self._input_buffer[-1] ^= (int(c, 16) << self._current_pos)
+                        self._current_pos += 8
+
+                        if self._current_pos > 56:
+                            self._current_pos = 0
+                            self._input_buffer.append(0)
+
+                case "bytes":
+                    for c in input_data:
+                        self._input_buffer[-1] ^= (c << self._current_pos)
+                        self._current_pos += 8
+
+                        if self._current_pos > 56:
+                            self._current_pos = 0
+                            self._input_buffer.append(0)
+
+                case "base64":
+                    data = b64decode(input_data)
+                    for c in data:
+                        self._input_buffer[-1] ^= (c << self._current_pos)
+                        self._current_pos += 8
+
+                        if self._current_pos > 56:
+                            self._current_pos = 0
+                            self._input_buffer.append(0)
+
+                case "bitarray":
+                    if self._unfinished_byte:
+                        input_data = self._unfinished_byte + input_data
+
+                    while len(input_data) > 8:
+                        c = input_data.pop()
+                        self._input_buffer[-1] ^= (c << self._current_pos)
+                        self._current_pos += 1
+
+                        if self._current_pos > 63:
+                            self._current_pos = 0
+                            self._input_buffer.append(0)
+
+                        self._unfinished_byte = input_data
+
+
+                case "bitstring":
+                    input_data = input_data.replace(" ", "")
+                    if self._unfinished_byte:
+                        input_data = self._unfinished_byte + input_data
+
+                    self._unfinished_byte = input_data[len(input_data)//8:]
+                    input_data = input_data[:len(input_data)//8]
+
+                    for c in input_data:
+                        self._input_buffer[-1] ^= (int(c) << self._current_pos)
+                        self._current_pos += 1
+
+                        if self._current_pos > 63:
+                            self._current_pos = 0
+                            self._input_buffer.append(0)
+
                 case _ :
-                    raise NotImplementedError("Not implemented yet.")
+                    raise ValueError(f"Unsupported input format: {self._input_format}")
+
+
+    def _write_state_array(self,
+                           file: IO,
+                           text: str
+                           ) -> None:
+        """
+        Writes current intermediary values into file with provided text.
+
+
+        Args:
+            file:
+                Handle of file to write to.
+
+            text:
+                Text to write along with intermediary values.
 
 
 
-                # case "bitarray":
-                #     self._input_buffer += input_data
-                #
-                # case "bitstring":
-                #     input_data = input_data.replace(" ", "").replace("\n", "")
-                #     self._input_buffer += [int(x) for x in input_data]
-                #
-                # case "hexstring":
-                #     input_data = input_data.replace(" ", "").replace("\n", "")
-                #     self._input_buffer += self.h2b(input_data)
-                #
-                # case "bytes":
-                #     self._input_buffer += self.h2b(input_data.hex())
-                #
-                # case "string":
-                #     hex_data = input_data.encode("utf-8").hex()
-                #     self._input_buffer += self.h2b(hex_data)
-                #
-                # case "base64":
-                #     hex_data = b64decode(input_data).hex()
-                #     self._input_buffer += self.h2b(hex_data)
-                #
-                # case _ :
-                #     raise ValueError(f"Unsupported input format: {self._input_format}")
+        """
+
+        file.write(text + "\n\n")
+
+
+        for k in range(25):
+                file.write(f"({k}): {self._state_array[k]}\n")
+
+        file.write("\n")
 
     def _merge_data_into_state_array(self
                                      ) -> None:
@@ -1038,44 +1187,72 @@ class KeccakV3(Keccak):
 
         """
 
-        if self.padding_algorithm == Keccak.pad10star1:
-            # TODO: fix properly
-            if self._domain_separation_bits == [0, 1]:
-                pad_start = 6
 
-            else:
-                raise NotImplementedError("Not implemented")
-            self._input_buffer[-1] ^= (pad_start << self._current_pos)
+        data_lists = [self._unfinished_byte, self._domain_separation_bits]
 
-            while len(self._input_buffer) % (self._r // 64) != 0:
-                self._input_buffer.append(0)
-            self._input_buffer[-1] ^= 9223372036854775808
+        for l in [l for l in data_lists if l]:
+            for x in l:
+                self._input_buffer[-1] ^= (int(x) << self._current_pos)
+                self._current_pos += 1
 
+                if self._current_pos > 63:
+                    self._current_pos = 0
+                    self._input_buffer.append(0)
+
+        self.padding_algorithm(self)
+
+    def _compute_output(self,
+                        result_array: list[int]
+                        ) -> None:
+        """
+        Extracts result of required length and transform it into hexstring and writes in into self.output.
+        Args:
+            result_array:
+                Prepared hexstring
+        """
+
+        if self._output_length:
+            result_array = result_array[:self._output_length//8]
         else:
-            raise NotImplementedError("Not implemented")
-            #TODO: implement
+            result_array = result_array[:self._d//8]
+        self.output = "".join([("0" + str(hex(r)[2:]).upper())[-2:] for r in result_array])
 
-    def _extract_result(self
-                    )-> None:
+    def pad10star1(self
+                   ) -> None:
         """
-        Extracts result of specified length from state array and sets self.output value.
+        Padding algorithm 10*1 as defined in chapter 5.1. This version directly applies it instead just returning padding.
+
+        """
+        self._input_buffer[-1] ^= (1 << self._current_pos)
+
+        while len(self._input_buffer) % (self._r // 64) != 0:
+            self._input_buffer.append(0)
+        self._input_buffer[-1] ^= 9223372036854775808
+
+
+    def _extract_result(self,
+                        result_array: list[Literal[0, 1]]
+                        )-> None:
+        """
+        Extracts result of specified length from state array.
 
         """
 
-        result_array = []
+        new_array = []
+
         pos = 0
-        while len(result_array) <= self._d//8:
+        while len(new_array) <= (self._r//8):
             number = self._state_array[pos]
-            result_array += [(number >> (8 * i)) & 0xFF for i in range(8)]
+            new_array += [(number >> (8 * i)) & 0xFF for i in range(8)]
             pos += 1
 
-        result_array = result_array[:self._d]
+        new_array = new_array[:self._r//8]
+        return result_array + new_array
 
-        self.output += "".join([str(hex(r)[2:]) for r in result_array])
 
 
-    def _algorithm_1_v2(self
-                        ) -> None:
+    def _algorithm_1(self
+                     ) -> None:
         """
                 Alternative version of algorithm θ.
                 Precomputes parity values for all columns and then do in-place XOR
@@ -1094,8 +1271,8 @@ class KeccakV3(Keccak):
                     self._state_array[x + 5 * y] ^= column_parity[(x + 4) % 5] ^ ((column_parity[(x + 1) % 5] << 1 | column_parity[(x + 1) % 5]  >> 63) % 18446744073709551616)
 
 
-    def _algorithm_2_v2(self
-                        ) -> None:
+    def _algorithm_2(self
+                     ) -> None:
         """
         Alternative version of algorithm ρ
         Uses precomputed values for all columns offset
@@ -1112,8 +1289,8 @@ class KeccakV3(Keccak):
         for t in range(1, 25):
             self._state_array[t] = ((self._state_array[t] >> offset_table[t]) | (self._state_array[t] << (64 - offset_table[t])) % 18446744073709551616)
 
-    def _algorithm_3_v2(self
-                        ) -> None:
+    def _algorithm_3(self
+                     ) -> None:
         """
         Alternative version of algorithm π.
         Uses precomputed permutation table so can be processed in-place.
@@ -1129,8 +1306,8 @@ class KeccakV3(Keccak):
         self._state_array[16] = start
 
 
-    def _algorithm_4_v2(self
-                        ) -> None:
+    def _algorithm_4(self
+                     ) -> None:
         """
         Alternative version of algorithm χ
         State is processed in-place.
@@ -1147,9 +1324,9 @@ class KeccakV3(Keccak):
             self._state_array[3 + 5 * y] ^= ~self._state_array[4 + 5 * y] & first_x
             self._state_array[4 + 5 * y] ^= ~first_x & second_x
 
-    def _algorithm_5_v2(self,
-                        ir: int
-                        ) -> None:
+    def _algorithm_5(self,
+                     ir: int
+                     ) -> None:
         """
         Alternative version of algorithm ι
         Uses precomputed table.
@@ -1166,6 +1343,11 @@ class KeccakV3(Keccak):
                            9223372039002292353, 9223372036854808704, 2147483649, 9223372039002292232]
 
         self._state_array[0] ^= round_constants[ir]
+
+
+class KeccakV4(KeccakV3):
+    def __init__(self):
+        raise NotImplementedError("KeccakV4 not implemented")
 
 
 class SHA3_224(KeccakV3):
