@@ -334,7 +334,7 @@ class Keccak:
         if input_data:
             match self._input_format:
                 case "bitarray":
-                    self._input_buffer += input_data
+                    self._input_buffer += input_data[:]
 
                 case "bitstring":
                     input_data = input_data.replace(" ", "").replace("\n", "")
@@ -1092,6 +1092,14 @@ class KeccakV3(Keccak):
                             self._input_buffer.append(0)
 
                 case "base64":
+                    input_data = self._unfinished_byte + input_data
+                    self._unfinished_byte = ""
+
+                    modcheck = len(input_data) % 4
+                    if modcheck != 0:
+                        self._unfinished_byte = input_data[-modcheck:]
+                        input_data = input_data[:-modcheck]
+
                     data = b64decode(input_data)
                     for c in data:
                         self._input_buffer[-1] ^= (c << self._current_pos)
@@ -1102,11 +1110,12 @@ class KeccakV3(Keccak):
                             self._input_buffer.append(0)
 
                 case "bitarray":
+                    input_data = input_data[:]
                     if self._unfinished_byte:
                         input_data = self._unfinished_byte + input_data
 
-                    while len(input_data) > 8:
-                        c = input_data.pop()
+                    while input_data:
+                        c = input_data.pop(0)
                         self._input_buffer[-1] ^= (c << self._current_pos)
                         self._current_pos += 1
 
@@ -1114,16 +1123,17 @@ class KeccakV3(Keccak):
                             self._current_pos = 0
                             self._input_buffer.append(0)
 
-                        self._unfinished_byte = input_data
-
+                    self._unfinished_byte = input_data
 
                 case "bitstring":
                     input_data = input_data.replace(" ", "")
                     if self._unfinished_byte:
                         input_data = self._unfinished_byte + input_data
 
-                    self._unfinished_byte = input_data[len(input_data)//8:]
-                    input_data = input_data[:len(input_data)//8]
+                    divider = 8*(len(input_data)//8)
+
+                    self._unfinished_byte = input_data[divider:]
+                    input_data = input_data[:divider]
 
                     for c in input_data:
                         self._input_buffer[-1] ^= (int(c) << self._current_pos)
@@ -1186,6 +1196,10 @@ class KeccakV3(Keccak):
         Applies domain separation bits and padding to input_buffer.
 
         """
+
+        if self._input_format == "base64" and self._unfinished_byte:
+            raise ValueError(f"Some data could not be processed: {self._unfinished_byte}")
+
 
 
         data_lists = [self._unfinished_byte, self._domain_separation_bits]
