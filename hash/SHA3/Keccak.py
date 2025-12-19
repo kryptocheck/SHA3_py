@@ -165,9 +165,6 @@ class Keccak:
         self._d : int = d
         self._output_length : int = output_length
 
-        if self._output_length % 8 != 0:
-            raise NotImplementedError(f"Output of length not in full bytes not implemented")
-
         self._state_array: list[list[list[Literal[0,1]]]] = self._initialize_empty_array()
 
         self._input_format: str = input_format
@@ -579,8 +576,9 @@ class Keccak:
 
         result = ""
         tmp_result = ""
-        if len(bit_array) % 8 != 0:
-            raise ValueError(f"Cannot create hexstring from bitstring length {len(bit_array)}")
+        while len(bit_array) % 8 != 0:
+            bit_array.append(0)
+
 
         while bit_array:
             this = bit_array[:4]
@@ -1226,7 +1224,18 @@ class KeccakV3(Keccak):
         """
 
         if self._output_length:
-            result_array = result_array[:self._output_length//8]
+            divider = self._output_length//8
+            trim_bits = (self._output_length - (8*divider))
+            last_byte = []
+            if trim_bits:
+                last_byte = result_array[divider]
+
+                mask = (1 << trim_bits)-1
+                last_byte = last_byte & mask
+
+            result_array = result_array[:divider]
+            if trim_bits:
+                result_array.append(last_byte)
         else:
             result_array = result_array[:self._d//8]
         self.output = "".join([("0" + str(hex(r)[2:]).upper())[-2:] for r in result_array])

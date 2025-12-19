@@ -2,6 +2,7 @@ import unittest
 
 from SHA3 import SHA3_224, SHA3_256, SHA3_384, SHA3_512, SHAKE_128, SHAKE_256
 
+
 class TestSHA3(unittest.TestCase):
 
     def test_NIST_test_vectors(self):
@@ -138,6 +139,30 @@ class TestSHA3(unittest.TestCase):
                     x3.finalize(tv[0][56:])
 
                     assert x3.output == results_shake[pos], f"test_input; {f}; input_type: {tv[1]}, impl_version: {impl_version}, version: 3,  expected {results_shake[pos]}, got: {x3.output}"
+
+    def test_NIST_shake_nonbyte_output_sizes(self):
+        """
+        Test samples to illustrate the proper truncation of SHAKE outputs for output lengths that are not multiples of
+        8-bits taken from https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-and-Guidelines/documents/examples/ShakeTruncation.pdf
+
+        Asserting only last 3 bytes.
+
+        """
+
+        expected_results = [(4096, "290B6F"),
+                            (4095, "290B6F"),
+                            (4094, "290B2F"),
+                            (4093, "290B0F"),
+                            (4092, "290B0F"),
+                            (4091, "290B07"),
+                            (4090, "290B03"),
+                            (4089, "290B01"),
+                            (4088, "97290B")]
+
+        for tv in expected_results:
+            for impl_version in range(1,4):
+                shake128 = SHAKE_128(input_data="", output_length=tv[0], input_format="bitstring", implementation_version=impl_version)
+                assert shake128.finalize("")[-6:] == tv[1], f"test_NIST_nonbyte; output_length: {tv[0]}, impl_version: {impl_version}, expected {tv[1]}, got: {shake128.output[-6:]}"
 
 
 if __name__ == "__main__":
