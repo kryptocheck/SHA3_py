@@ -1,6 +1,12 @@
 from base64 import b64decode
 from typing import Literal, IO
 
+try:
+    from cffi import FFI
+    possible_V4 = True
+except ImportError:
+    possible_V4 = False
+
 class Keccak:
 
     POSSIBLE_B = {25: (1, 0),
@@ -1368,402 +1374,522 @@ class KeccakV3(Keccak):
         self._state_array[0] ^= round_constants[ir]
 
 
+
 class KeccakV4(KeccakV3):
-    def __init__(self):
-        raise NotImplementedError("KeccakV4 not implemented")
-
-
-class SHA3_224(KeccakV3):
-    """
-    Implementation of SHA3_224 algorithm. For educational purposes only, do not use in production.
-
-    Basic usage:
-        x = SHA3_224("sample data")
-        print (x.output)
-
-    For advanced usage examples see README.md file.
-
-    """
     def __init__(self,
-                 input_data: str | list[Literal[0,1]],
-                 input_format: str="string",
-                 output_intermediate_values: bool=False,
-                 nist_format: bool=False,
-                 implementation_version: int = 3
-                 ) -> None:
-        """
-        Implementation of SHA3_224 algorithm. For educational purposes only, do not use in production.
-
-        When output_intermediate_values is set to True, creates file with intermediate values.
-
-        If nist_format is set, values are in format used here:
-        https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values
-
-        Args:
-            input_data:
-                Optional data to process. If present, it automatically calls finalize().
-
-            input_format:
-                Format of input data. Possible values:
-                    string: "example"
-                    hexstring: "65 78 61 6D 70 6C 65" (optional spaces)
-                    bitstring: "01000101 01111000 01100001 01101101 01110000 01101100 01100101" (optional spaces)
-                    bitarray: [0, 1, 0, 0, 0, 1, 0, 1]
-                    base64: "ZXhhbXBsZQ=="
-
-            output_intermediate_values:
-                If true, basic algorithm versions are used and file with intermediate values are created.
-                If false, better algorithm versions are used and only output is produced.
-
-            nist_format:
-                Only relevant when output_intermediate_values.
-                When True, exports intermediary values in SHA3 string format as stated in NIST example here:
-                https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values
-                When False, exports intermediary values in regular HEX format.
-
-                Example:
-                    When True: 0101 1100 -> 3A
-                    When False: 0101 1100 -> 5C
-
-            implementation_version:
-                What implementation of algorithm is actually used for computation? Possible values:
-                    1 - 3D state array and as writen in standard. Only one that can be used with
-                        output_intermediate_values
-                    2 - 3D state array, some improvements for better speed
-                    3 - 1D state array, my fastest pure python implementation
-                    4 - 1D state array, internally calls my C implementation of SHA3 (default)
-        """
-
-        super().__init__(b = 1600,
-                         rounds = 24,
-                         d = 224,
-                         c = 448,
-                         input_data = input_data,
-                         input_format = input_format,
-                         domain_separation_bits = [0, 1],
-                         padding_algorithm = self.pad10star1,
-                         output_intermediate_values = output_intermediate_values,
-                         nist_format = nist_format)
-
-
-class SHA3_256(Keccak):
-    """
-    Implementation of SHA3_256 algorithm. For educational purposes only, do not use in production.
-
-    Basic usage:
-        x = SHA3_256("sample data")
-        print (x.output)
-
-    For advanced usage examples see README.md file.
-
-    """
-
-    def __init__(self,
-                 input_data: str | list[Literal[0, 1]],
+                 b: int,
+                 rounds: int,
+                 d: int,
+                 c: int,
+                 input_data: str | bytes | list[Literal[0, 1]] = "",
                  input_format: str = "string",
+                 domain_separation_bits: list[Literal[0, 1]] = None,
+                 padding_algorithm: callable = None,
+                 output_length: int = 0,
                  output_intermediate_values: bool = False,
                  nist_format: bool = False
                  ) -> None:
-        """
-        Implementation of SHA3_256 algorithm. For educational purposes only, do not use in production.
 
-        When output_intermediate_values is set to True, creates file with intermediate values in the format used here:
-        https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values
-
-        Args:
-            input_data:
-                Optional data to process. If present, it automatically calls finalize().
-
-            input_format:
-                Format of input data. Possible values:
-                    string: "example"
-                    hexstring: "65 78 61 6D 70 6C 65" (optional spaces)
-                    bitstring: "01000101 01111000 01100001 01101101 01110000 01101100 01100101" (optional spaces)
-                    bitarray: [0, 1, 0, 0, 0, 1, 0, 1]
-                    base64: "ZXhhbXBsZQ=="
-
-            output_intermediate_values:
-                If true, basic algorithm versions are used and file with intermediate values are created.
-                If false, better algorithm versions are used and only output is produced.
-
-            nist_format:
-                Only relevant when output_intermediate_values.
-                When True, exports intermediary values in SHA3 string format as stated in NIST example here:
-                https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values
-                When False, exports intermediary values in regular HEX format.
-
-                Example:
-                    When True: 0101 1100 -> 3A
-                    When False: 0101 1100 -> 5C
-
-        """
-
-        super().__init__(b = 1600,
-                         rounds = 24,
-                         d = 256,
-                         c = 512,
+        self.ffi = FFI()
+        super().__init__(b = b,
+                         rounds= rounds,
+                         d = d,
+                         c = c,
                          input_data = input_data,
                          input_format = input_format,
-                         domain_separation_bits = [0, 1],
-                         padding_algorithm = self.pad10star1,
-                         output_intermediate_values = output_intermediate_values,
-                         nist_format = nist_format)
-
-class SHA3_384(Keccak):
-    """
-    Implementation of SHA3_384 algorithm. For educational purposes only, do not use in production.
-
-    Basic usage:
-        x = SHA3_384("sample data")
-        print (x.output)
-
-    For advanced usage examples see README.md file.
-
-    """
-
-    def __init__(self,
-                 input_data: str | list[Literal[0, 1]],
-                 input_format: str = "string",
-                 output_intermediate_values: bool = False,
-                 nist_format: bool = False
-                 ) -> None:
-        """
-        Implementation of SHA3_384 algorithm. For educational purposes only, do not use in production.
-
-        When output_intermediate_values is set to True, creates file with intermediate values in the format used here:
-        https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values
-
-        Args:
-            input_data:
-                Optional data to process. If present, it automatically calls finalize().
-
-            input_format:
-                Format of input data. Possible values:
-                    string: "example"
-                    hexstring: "65 78 61 6D 70 6C 65" (optional spaces)
-                    bitstring: "01000101 01111000 01100001 01101101 01110000 01101100 01100101" (optional spaces)
-                    bitarray: [0, 1, 0, 0, 0, 1, 0, 1]
-                    base64: "ZXhhbXBsZQ=="
-
-            output_intermediate_values:
-                If true, basic algorithm versions are used and file with intermediate values are created.
-                If false, better algorithm versions are used and only output is produced.
-
-            nist_format:
-                Only relevant when output_intermediate_values.
-                When True, exports intermediary values in SHA3 string format as stated in NIST example here:
-                https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values
-                When False, exports intermediary values in regular HEX format.
-
-                Example:
-                    When True: 0101 1100 -> 3A
-                    When False: 0101 1100 -> 5C
-
-        """
-        super().__init__(b = 1600,
-                         rounds = 24,
-                         d = 384,
-                         c = 768,
-                         input_data = input_data,
-                         input_format = input_format,
-                         domain_separation_bits = [0, 1],
-                         padding_algorithm = self.pad10star1,
-                         output_intermediate_values = output_intermediate_values,
-                         nist_format = nist_format)
-
-class SHA3_512(Keccak):
-    """
-    Implementation of SHA3_512 algorithm. For educational purposes only, do not use in production.
-
-    Basic usage:
-        x = SHA3_512("sample data")
-        print (x.output)
-
-    For advanced usage examples see README.md file.
-
-    """
-
-    def __init__(self,
-                 input_data: str | list[Literal[0, 1]],
-                 input_format: str = "string",
-                 output_intermediate_values: bool = False,
-                 nist_format: bool = False
-                 ) -> None:
-        """
-        Implementation of SHA3_512 algorithm. For educational purposes only, do not use in production.
-
-        When output_intermediate_values is set to True, creates file with intermediate values in the format used here:
-        https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values
-
-        Args:
-            input_data:
-                Optional data to process. If present, it automatically calls finalize().
-
-            input_format:
-                Format of input data. Possible values:
-                    string: "example"
-                    hexstring: "65 78 61 6D 70 6C 65" (optional spaces)
-                    bitstring: "01000101 01111000 01100001 01101101 01110000 01101100 01100101" (optional spaces)
-                    bitarray: [0, 1, 0, 0, 0, 1, 0, 1]
-                    base64: "ZXhhbXBsZQ=="
-
-            output_intermediate_values:
-                If true, basic algorithm versions are used and file with intermediate values are created.
-                If false, better algorithm versions are used and only output is produced.
-
-            nist_format:
-                Only relevant when output_intermediate_values.
-                When True, exports intermediary values in SHA3 string format as stated in NIST example here:
-                https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values
-                When False, exports intermediary values in regular HEX format.
-
-                Example:
-                    When True: 0101 1100 -> 3A
-                    When False: 0101 1100 -> 5C
-
-        """
-        super().__init__(b = 1600,
-                         rounds = 24,
-                         d = 512,
-                         c = 1024,
-                         input_data = input_data,
-                         input_format = input_format,
-                         domain_separation_bits = [0, 1],
-                         padding_algorithm = self.pad10star1,
-                         output_intermediate_values = output_intermediate_values,
-                         nist_format = nist_format)
-
-class SHAKE_128(Keccak):
-    """
-    Implementation of SHAKE_128 algorithm. For educational purposes only, do not use in production.
-
-    Basic usage:
-        x = SHAKE_128("sample data", 800)
-        print (x.output)
-
-    For advanced usage examples see README.md file.
-
-    """
-
-    def __init__(self,
-                 input_data: str | list[Literal[0, 1]],
-                 output_length: int,
-                 input_format: str = "string",
-                 output_intermediate_values: bool = False,
-                 nist_format: bool = False
-                 ) -> None:
-        """
-        Implementation of SHAKE_128 algorithm. For educational purposes only, do not use in production.
-
-        When output_intermediate_values is set to True, creates file with intermediate values in the format used here:
-        https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values
-
-        Args:
-            input_data:
-                Optional data to process. If present, it automatically calls finalize().
-
-            output_length:
-                requested length of the output of an XOF in bits.
-
-            input_format:
-                Format of input data. Possible values:
-                    string: "example"
-                    hexstring: "65 78 61 6D 70 6C 65" (optional spaces)
-                    bitstring: "01000101 01111000 01100001 01101101 01110000 01101100 01100101" (optional spaces)
-                    bitarray: [0, 1, 0, 0, 0, 1, 0, 1]
-                    base64: "ZXhhbXBsZQ=="
-
-            output_intermediate_values:
-                If true, basic algorithm versions are used and file with intermediate values are created.
-                If false, better algorithm versions are used and only output is produced.
-
-            nist_format:
-                Only relevant when output_intermediate_values.
-                When True, exports intermediary values in SHA3 string format as stated in NIST example here:
-                https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values
-                When False, exports intermediary values in regular HEX format.
-
-                Example:
-                    When True: 0101 1100 -> 3A
-                    When False: 0101 1100 -> 5C
-
-        """
-        super().__init__(b = 1600,
-                         rounds = 24,
-                         d = 128,
-                         c = 256,
-                         input_data = input_data,
-                         input_format = input_format,
-                         domain_separation_bits = [1, 1, 1, 1],
-                         padding_algorithm = self.pad10star1,
+                         domain_separation_bits = domain_separation_bits,
+                         padding_algorithm = padding_algorithm,
                          output_length = output_length,
                          output_intermediate_values = output_intermediate_values,
                          nist_format = nist_format)
 
-class SHAKE_256(Keccak):
-    """
-    Implementation of SHAKE_256 algorithm. For educational purposes only, do not use in production.
 
-    Basic usage:
-        x = SHAKE_256("sample data", 800)
-        print (x.output)
 
-    For advanced usage examples see README.md file.
-
-    """
-    def __init__(self,
-                 input_data: str | list[Literal[0, 1]],
-                 output_length: int,
-                 input_format: str = "string",
-                 output_intermediate_values: bool = False,
-                 nist_format: bool = False
-                 ) -> None:
+    def _initialize_empty_array(self
+                                ) -> list[int]:
         """
-        Implementation of SHAKE_256 algorithm. For educational purposes only, do not use in production.
+        Creates empty state array (1-dimensional)
 
-        When output_intermediate_values is set to True, creates file with intermediate values in the format used here:
-        https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values
+
+        Returns:
+            empty state array
+
+        """
+
+        arr = []
+        for x in range(25):
+            arr.append(0)
+        c_arr = self.ffi.new("uint64_t[25]", arr)
+
+        return c_arr
+
+    def finalize(self,
+                 input_data: str | bytes | list[Literal[0,1]] = None
+                 ) -> str:
+        """
+        Takes input_data, preprocesses it, adds optional domain separation bits and applies padding, then processes
+        whole input_buffer
+
 
         Args:
             input_data:
-                Optional data to process. If present, it automatically calls finalize().
+                newly added input text
 
-            output_length:
-                requested length of the output of an XOF in bits.
-
-            input_format:
-                Format of input data. Possible values:
-                    string: "example"
-                    hexstring: "65 78 61 6D 70 6C 65" (optional spaces)
-                    bitstring: "01000101 01111000 01100001 01101101 01110000 01101100 01100101" (optional spaces)
-                    bitarray: [0, 1, 0, 0, 0, 1, 0, 1]
-                    base64: "ZXhhbXBsZQ=="
-
-            output_intermediate_values:
-                If true, basic algorithm versions are used and file with intermediate values are created.
-                If false, better algorithm versions are used and only output is produced.
-
-            nist_format:
-                Only relevant when output_intermediate_values.
-                When True, exports intermediary values in SHA3 string format as stated in NIST example here:
-                https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values
-                When False, exports intermediary values in regular HEX format.
-
-                Example:
-                    When True: 0101 1100 -> 3A
-                    When False: 0101 1100 -> 5C
+        Returns:
+            hexstring result of computation
 
         """
-        super().__init__(b = 1600,
-                         rounds = 24,
-                         d = 256,
-                         c = 512,
-                         input_data=input_data,
-                         input_format=input_format,
-                         domain_separation_bits=[1, 1, 1, 1],
-                         padding_algorithm = self.pad10star1,
-                         output_length=output_length,
-                         output_intermediate_values=output_intermediate_values,
-                         nist_format = nist_format)
 
+        if self._finalized:
+            raise ValueError(f"Already finalized")
+
+        self._preprocess_input(input_data)
+        self._finalize_input_buffer()
+
+        self.ffi.cdef("int *UpdateState(uint64_t *state, uint64_t *inputData, size_t inputLength, int rWords, int *result, size_t outputBytes);")
+
+        # TODO: change path to local in this directory
+
+        lib = self.ffi.dlopen("/home/nytheas/CProjects/SHA3/sha3.so")
+
+        c_input_data = self.ffi.new("uint64_t[]", self._input_buffer)
+        c_input_length = len(self._input_buffer)
+        c_r_word = self._r//64
+
+        output_length = (((self._d // c_r_word) + 1) * c_r_word * 8)
+
+        c_result = self.ffi.new(f"int[{output_length}]", [])
+        c_output_bytes = output_length
+
+        (lib.UpdateState(self._state_array, c_input_data, c_input_length, c_r_word, c_result, c_output_bytes))
+
+        self._compute_output(list(c_result))
+
+        self._finalized = True
+        return self.output
+
+    def _compute_output(self,
+                        result_array: list[int]
+                        ) -> None:
+        """
+        Extracts result of required length and transform it into hexstring and writes in into self.output.
+        Args:
+            result_array:
+                Prepared hexstring
+        """
+
+        if self._output_length:
+            divider = self._output_length//8
+            trim_bits = (self._output_length - (8*divider))
+            last_byte = []
+            if trim_bits:
+                last_byte = result_array[divider]
+
+                mask = (1 << trim_bits)-1
+                last_byte = last_byte & mask
+
+            result_array = result_array[:divider]
+            if trim_bits:
+                result_array.append(last_byte)
+        else:
+            result_array = result_array[:self._d//8]
+        self.output = "".join([("0" + str(hex(r)[2:]).upper())[-2:] for r in result_array])
+
+
+# class SHA3_224(KeccakV3):
+#     """
+#     Implementation of SHA3_224 algorithm. For educational purposes only, do not use in production.
+#
+#     Basic usage:
+#         x = SHA3_224("sample data")
+#         print (x.output)
+#
+#     For advanced usage examples see README.md file.
+#
+#     """
+#     def __init__(self,
+#                  input_data: str | list[Literal[0,1]],
+#                  input_format: str="string",
+#                  output_intermediate_values: bool=False,
+#                  nist_format: bool=False,
+#                  implementation_version: int = 3
+#                  ) -> None:
+#         """
+#         Implementation of SHA3_224 algorithm. For educational purposes only, do not use in production.
+#
+#         When output_intermediate_values is set to True, creates file with intermediate values.
+#
+#         If nist_format is set, values are in format used here:
+#         https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values
+#
+#         Args:
+#             input_data:
+#                 Optional data to process. If present, it automatically calls finalize().
+#
+#             input_format:
+#                 Format of input data. Possible values:
+#                     string: "example"
+#                     hexstring: "65 78 61 6D 70 6C 65" (optional spaces)
+#                     bitstring: "01000101 01111000 01100001 01101101 01110000 01101100 01100101" (optional spaces)
+#                     bitarray: [0, 1, 0, 0, 0, 1, 0, 1]
+#                     base64: "ZXhhbXBsZQ=="
+#
+#             output_intermediate_values:
+#                 If true, basic algorithm versions are used and file with intermediate values are created.
+#                 If false, better algorithm versions are used and only output is produced.
+#
+#             nist_format:
+#                 Only relevant when output_intermediate_values.
+#                 When True, exports intermediary values in SHA3 string format as stated in NIST example here:
+#                 https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values
+#                 When False, exports intermediary values in regular HEX format.
+#
+#                 Example:
+#                     When True: 0101 1100 -> 3A
+#                     When False: 0101 1100 -> 5C
+#
+#             implementation_version:
+#                 What implementation of algorithm is actually used for computation? Possible values:
+#                     1 - 3D state array and as writen in standard. Only one that can be used with
+#                         output_intermediate_values
+#                     2 - 3D state array, some improvements for better speed
+#                     3 - 1D state array, my fastest pure python implementation
+#                     4 - 1D state array, internally calls my C implementation of SHA3 (default)
+#         """
+#
+#         super().__init__(b = 1600,
+#                          rounds = 24,
+#                          d = 224,
+#                          c = 448,
+#                          input_data = input_data,
+#                          input_format = input_format,
+#                          domain_separation_bits = [0, 1],
+#                          padding_algorithm = self.pad10star1,
+#                          output_intermediate_values = output_intermediate_values,
+#                          nist_format = nist_format)
+#
+#
+#
+
+#
+# class SHA3_256(Keccak):
+#     """
+#     Implementation of SHA3_256 algorithm. For educational purposes only, do not use in production.
+#
+#     Basic usage:
+#         x = SHA3_256("sample data")
+#         print (x.output)
+#
+#     For advanced usage examples see README.md file.
+#
+#     """
+#
+#     def __init__(self,
+#                  input_data: str | list[Literal[0, 1]],
+#                  input_format: str = "string",
+#                  output_intermediate_values: bool = False,
+#                  nist_format: bool = False
+#                  ) -> None:
+#         """
+#         Implementation of SHA3_256 algorithm. For educational purposes only, do not use in production.
+#
+#         When output_intermediate_values is set to True, creates file with intermediate values in the format used here:
+#         https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values
+#
+#         Args:
+#             input_data:
+#                 Optional data to process. If present, it automatically calls finalize().
+#
+#             input_format:
+#                 Format of input data. Possible values:
+#                     string: "example"
+#                     hexstring: "65 78 61 6D 70 6C 65" (optional spaces)
+#                     bitstring: "01000101 01111000 01100001 01101101 01110000 01101100 01100101" (optional spaces)
+#                     bitarray: [0, 1, 0, 0, 0, 1, 0, 1]
+#                     base64: "ZXhhbXBsZQ=="
+#
+#             output_intermediate_values:
+#                 If true, basic algorithm versions are used and file with intermediate values are created.
+#                 If false, better algorithm versions are used and only output is produced.
+#
+#             nist_format:
+#                 Only relevant when output_intermediate_values.
+#                 When True, exports intermediary values in SHA3 string format as stated in NIST example here:
+#                 https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values
+#                 When False, exports intermediary values in regular HEX format.
+#
+#                 Example:
+#                     When True: 0101 1100 -> 3A
+#                     When False: 0101 1100 -> 5C
+#
+#         """
+#
+#         super().__init__(b = 1600,
+#                          rounds = 24,
+#                          d = 256,
+#                          c = 512,
+#                          input_data = input_data,
+#                          input_format = input_format,
+#                          domain_separation_bits = [0, 1],
+#                          padding_algorithm = self.pad10star1,
+#                          output_intermediate_values = output_intermediate_values,
+#                          nist_format = nist_format)
+#
+# class SHA3_384(Keccak):
+#     """
+#     Implementation of SHA3_384 algorithm. For educational purposes only, do not use in production.
+#
+#     Basic usage:
+#         x = SHA3_384("sample data")
+#         print (x.output)
+#
+#     For advanced usage examples see README.md file.
+#
+#     """
+#
+#     def __init__(self,
+#                  input_data: str | list[Literal[0, 1]],
+#                  input_format: str = "string",
+#                  output_intermediate_values: bool = False,
+#                  nist_format: bool = False
+#                  ) -> None:
+#         """
+#         Implementation of SHA3_384 algorithm. For educational purposes only, do not use in production.
+#
+#         When output_intermediate_values is set to True, creates file with intermediate values in the format used here:
+#         https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values
+#
+#         Args:
+#             input_data:
+#                 Optional data to process. If present, it automatically calls finalize().
+#
+#             input_format:
+#                 Format of input data. Possible values:
+#                     string: "example"
+#                     hexstring: "65 78 61 6D 70 6C 65" (optional spaces)
+#                     bitstring: "01000101 01111000 01100001 01101101 01110000 01101100 01100101" (optional spaces)
+#                     bitarray: [0, 1, 0, 0, 0, 1, 0, 1]
+#                     base64: "ZXhhbXBsZQ=="
+#
+#             output_intermediate_values:
+#                 If true, basic algorithm versions are used and file with intermediate values are created.
+#                 If false, better algorithm versions are used and only output is produced.
+#
+#             nist_format:
+#                 Only relevant when output_intermediate_values.
+#                 When True, exports intermediary values in SHA3 string format as stated in NIST example here:
+#                 https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values
+#                 When False, exports intermediary values in regular HEX format.
+#
+#                 Example:
+#                     When True: 0101 1100 -> 3A
+#                     When False: 0101 1100 -> 5C
+#
+#         """
+#         super().__init__(b = 1600,
+#                          rounds = 24,
+#                          d = 384,
+#                          c = 768,
+#                          input_data = input_data,
+#                          input_format = input_format,
+#                          domain_separation_bits = [0, 1],
+#                          padding_algorithm = self.pad10star1,
+#                          output_intermediate_values = output_intermediate_values,
+#                          nist_format = nist_format)
+#
+# class SHA3_512(Keccak):
+#     """
+#     Implementation of SHA3_512 algorithm. For educational purposes only, do not use in production.
+#
+#     Basic usage:
+#         x = SHA3_512("sample data")
+#         print (x.output)
+#
+#     For advanced usage examples see README.md file.
+#
+#     """
+#
+#     def __init__(self,
+#                  input_data: str | list[Literal[0, 1]],
+#                  input_format: str = "string",
+#                  output_intermediate_values: bool = False,
+#                  nist_format: bool = False
+#                  ) -> None:
+#         """
+#         Implementation of SHA3_512 algorithm. For educational purposes only, do not use in production.
+#
+#         When output_intermediate_values is set to True, creates file with intermediate values in the format used here:
+#         https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values
+#
+#         Args:
+#             input_data:
+#                 Optional data to process. If present, it automatically calls finalize().
+#
+#             input_format:
+#                 Format of input data. Possible values:
+#                     string: "example"
+#                     hexstring: "65 78 61 6D 70 6C 65" (optional spaces)
+#                     bitstring: "01000101 01111000 01100001 01101101 01110000 01101100 01100101" (optional spaces)
+#                     bitarray: [0, 1, 0, 0, 0, 1, 0, 1]
+#                     base64: "ZXhhbXBsZQ=="
+#
+#             output_intermediate_values:
+#                 If true, basic algorithm versions are used and file with intermediate values are created.
+#                 If false, better algorithm versions are used and only output is produced.
+#
+#             nist_format:
+#                 Only relevant when output_intermediate_values.
+#                 When True, exports intermediary values in SHA3 string format as stated in NIST example here:
+#                 https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values
+#                 When False, exports intermediary values in regular HEX format.
+#
+#                 Example:
+#                     When True: 0101 1100 -> 3A
+#                     When False: 0101 1100 -> 5C
+#
+#         """
+#         super().__init__(b = 1600,
+#                          rounds = 24,
+#                          d = 512,
+#                          c = 1024,
+#                          input_data = input_data,
+#                          input_format = input_format,
+#                          domain_separation_bits = [0, 1],
+#                          padding_algorithm = self.pad10star1,
+#                          output_intermediate_values = output_intermediate_values,
+#                          nist_format = nist_format)
+#
+# class SHAKE_128(Keccak):
+#     """
+#     Implementation of SHAKE_128 algorithm. For educational purposes only, do not use in production.
+#
+#     Basic usage:
+#         x = SHAKE_128("sample data", 800)
+#         print (x.output)
+#
+#     For advanced usage examples see README.md file.
+#
+#     """
+#
+#     def __init__(self,
+#                  input_data: str | list[Literal[0, 1]],
+#                  output_length: int,
+#                  input_format: str = "string",
+#                  output_intermediate_values: bool = False,
+#                  nist_format: bool = False
+#                  ) -> None:
+#         """
+#         Implementation of SHAKE_128 algorithm. For educational purposes only, do not use in production.
+#
+#         When output_intermediate_values is set to True, creates file with intermediate values in the format used here:
+#         https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values
+#
+#         Args:
+#             input_data:
+#                 Optional data to process. If present, it automatically calls finalize().
+#
+#             output_length:
+#                 requested length of the output of an XOF in bits.
+#
+#             input_format:
+#                 Format of input data. Possible values:
+#                     string: "example"
+#                     hexstring: "65 78 61 6D 70 6C 65" (optional spaces)
+#                     bitstring: "01000101 01111000 01100001 01101101 01110000 01101100 01100101" (optional spaces)
+#                     bitarray: [0, 1, 0, 0, 0, 1, 0, 1]
+#                     base64: "ZXhhbXBsZQ=="
+#
+#             output_intermediate_values:
+#                 If true, basic algorithm versions are used and file with intermediate values are created.
+#                 If false, better algorithm versions are used and only output is produced.
+#
+#             nist_format:
+#                 Only relevant when output_intermediate_values.
+#                 When True, exports intermediary values in SHA3 string format as stated in NIST example here:
+#                 https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values
+#                 When False, exports intermediary values in regular HEX format.
+#
+#                 Example:
+#                     When True: 0101 1100 -> 3A
+#                     When False: 0101 1100 -> 5C
+#
+#         """
+#         super().__init__(b = 1600,
+#                          rounds = 24,
+#                          d = 128,
+#                          c = 256,
+#                          input_data = input_data,
+#                          input_format = input_format,
+#                          domain_separation_bits = [1, 1, 1, 1],
+#                          padding_algorithm = self.pad10star1,
+#                          output_length = output_length,
+#                          output_intermediate_values = output_intermediate_values,
+#                          nist_format = nist_format)
+#
+# class SHAKE_256(Keccak):
+#     """
+#     Implementation of SHAKE_256 algorithm. For educational purposes only, do not use in production.
+#
+#     Basic usage:
+#         x = SHAKE_256("sample data", 800)
+#         print (x.output)
+#
+#     For advanced usage examples see README.md file.
+#
+#     """
+#     def __init__(self,
+#                  input_data: str | list[Literal[0, 1]],
+#                  output_length: int,
+#                  input_format: str = "string",
+#                  output_intermediate_values: bool = False,
+#                  nist_format: bool = False
+#                  ) -> None:
+#         """
+#         Implementation of SHAKE_256 algorithm. For educational purposes only, do not use in production.
+#
+#         When output_intermediate_values is set to True, creates file with intermediate values in the format used here:
+#         https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values
+#
+#         Args:
+#             input_data:
+#                 Optional data to process. If present, it automatically calls finalize().
+#
+#             output_length:
+#                 requested length of the output of an XOF in bits.
+#
+#             input_format:
+#                 Format of input data. Possible values:
+#                     string: "example"
+#                     hexstring: "65 78 61 6D 70 6C 65" (optional spaces)
+#                     bitstring: "01000101 01111000 01100001 01101101 01110000 01101100 01100101" (optional spaces)
+#                     bitarray: [0, 1, 0, 0, 0, 1, 0, 1]
+#                     base64: "ZXhhbXBsZQ=="
+#
+#             output_intermediate_values:
+#                 If true, basic algorithm versions are used and file with intermediate values are created.
+#                 If false, better algorithm versions are used and only output is produced.
+#
+#             nist_format:
+#                 Only relevant when output_intermediate_values.
+#                 When True, exports intermediary values in SHA3 string format as stated in NIST example here:
+#                 https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values
+#                 When False, exports intermediary values in regular HEX format.
+#
+#                 Example:
+#                     When True: 0101 1100 -> 3A
+#                     When False: 0101 1100 -> 5C
+#
+#         """
+#         super().__init__(b = 1600,
+#                          rounds = 24,
+#                          d = 256,
+#                          c = 512,
+#                          input_data=input_data,
+#                          input_format=input_format,
+#                          domain_separation_bits=[1, 1, 1, 1],
+#                          padding_algorithm = self.pad10star1,
+#                          output_length=output_length,
+#                          output_intermediate_values=output_intermediate_values,
+#                          nist_format = nist_format)
+#
 
