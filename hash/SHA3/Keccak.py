@@ -1446,22 +1446,29 @@ class KeccakV4(KeccakV3):
         self._preprocess_input(input_data)
         self._finalize_input_buffer()
 
-        self.ffi.cdef("int *UpdateState(uint64_t *state, uint64_t *inputData, size_t inputLength, int rWords, int *result, size_t outputBytes);")
+        self.ffi.cdef("void UpdateState(uint64_t *state, uint64_t *inputBuffer, size_t inputLength, int rWords, int *result, size_t outputBytes);")
 
-        # TODO: change path to local in this directory
+        # TODO: change for Windows
+        # TODO: create dll file for windows
 
-        lib = self.ffi.dlopen("/home/nytheas/CProjects/SHA3/sha3.so")
+        lib = self.ffi.dlopen("./c_sha3.so")
 
         c_input_data = self.ffi.new("uint64_t[]", self._input_buffer)
         c_input_length = len(self._input_buffer)
         c_r_word = self._r//64
 
-        output_length = (((self._d // c_r_word) + 1) * c_r_word * 8)
+        if self._output_length:
+            length_parameter = self._output_length // 8
+        else:
+            length_parameter = self._d // 8
+
+
+        output_length = (((length_parameter // (c_r_word * 8)) + 1) * c_r_word * 8)
 
         c_result = self.ffi.new(f"int[{output_length}]", [])
         c_output_bytes = output_length
 
-        (lib.UpdateState(self._state_array, c_input_data, c_input_length, c_r_word, c_result, c_output_bytes))
+        lib.UpdateState(self._state_array, c_input_data, c_input_length, c_r_word, c_result, c_output_bytes)
 
         self._compute_output(list(c_result))
 

@@ -110,5 +110,14 @@ Tested SHA3_224 with short string inputs 10 times each and computed average.
 | 1              | 0.127s        |
 | 2              | 0.035s        |
 | 3              | 0.007s        |
-| 4              | ?             |
+| 4              | 0.006s        |
 
+
+Tested SHAKE_128 (3 times) with short string input and 100 000 bits output. 
+
+| Implementation | Average of 3 |
+|----------------|--------------|
+| 1              | 11.726s      |
+| 2              | 4.998s       |
+| 3              | 3.963s       |
+| 4              | 0.045s       |
