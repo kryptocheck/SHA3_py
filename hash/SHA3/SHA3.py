@@ -1,5 +1,12 @@
 from typing import Literal, IO
 
+try:
+    from cffi import FFI
+    possible_V4 = True
+except ImportError:
+    possible_V4 = False
+
+
 from Keccak import Keccak, KeccakV2, KeccakV3, KeccakV4
 
 class _SHA3:
@@ -37,8 +44,13 @@ class _SHA3:
                 self._keccak_data["padding_algorithm"] = KeccakV3.pad10star1
                 self.keccak_instance = KeccakV3(**self._keccak_data)
             case 4:
-                self._keccak_data["padding_algorithm"] = KeccakV4.pad10star1
-                self.keccak_instance = KeccakV4(**self._keccak_data)
+                if possible_V4:
+                    self._keccak_data["padding_algorithm"] = KeccakV4.pad10star1
+                    self.keccak_instance = KeccakV4(**self._keccak_data)
+                else:
+                    print("Cannot use v4 - install cffi module first. Switching to v3")
+                    self._keccak_data["padding_algorithm"] = KeccakV3.pad10star1
+                    self.keccak_instance = KeccakV3(**self._keccak_data)
             case _:
                 self._keccak_data["padding_algorithm"] = Keccak.pad10star1
                 self.keccak_instance = Keccak(**self._keccak_data)

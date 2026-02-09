@@ -91,6 +91,10 @@ There are actually 4 separate implementations of the same Keccak algorithm here 
 * **Version 3**: Uses 1D array of 64bit integers. Still pure python though.
 * **Version 4**: Internally calls my own C implementation and returns result.
 
+*Note: To be able to use version 4, you need cffi library installed (e.g. pip install cffi). If cffi is not installed and you try to use V4, it will be automatically downgraded to V3.*
+*Note2: V4 works for linux and windows operation system only.*
+
+
 You can modify what implementation is actually used by calling function with parameter **implementation_version** = *1,2,3* or *4* respectively. 
 
 ```python
@@ -113,7 +117,7 @@ Tested SHA3_224 with short string inputs 10 times each and computed average.
 | 4              | 0.006s        |
 
 
-Tested SHAKE_128 (3 times) with short string input and 100 000 bits output. 
+Tested SHAKE_128 (3 times each) with short string input and 100 000 bits output. 
 
 | Implementation | Average of 3 |
 |----------------|--------------|

@@ -1,11 +1,13 @@
 from base64 import b64decode
 from typing import Literal, IO
+from sys import platform
+from os import path
 
 try:
     from cffi import FFI
-    possible_V4 = True
-except ImportError:
-    possible_V4 = False
+except:
+    pass
+
 
 class Keccak:
 
@@ -1249,7 +1251,7 @@ class KeccakV3(Keccak):
     def pad10star1(self
                    ) -> None:
         """
-        Padding algorithm 10*1 as defined in chapter 5.1. This version directly applies it instead just returning padding.
+            Padding algorithm 10*1 as defined in chapter 5.1. This version directly applies it instead just returning padding.
 
         """
         self._input_buffer[-1] ^= (1 << self._current_pos)
@@ -1448,10 +1450,12 @@ class KeccakV4(KeccakV3):
 
         self.ffi.cdef("void UpdateState(uint64_t *state, uint64_t *inputBuffer, size_t inputLength, int rWords, int *result, size_t outputBytes);")
 
-        # TODO: change for Windows
-        # TODO: create dll file for windows
-
-        lib = self.ffi.dlopen("./c_sha3.so")
+        if platform == "win32":
+            lib = self.ffi.dlopen(path.abspath("../../SHA3/c_sha3.dll"))
+        elif platform == "linux":
+            lib = self.ffi.dlopen("./c_sha3.so")
+        else:
+            raise EnvironmentError(f"Not supported on platform {platform}")
 
         c_input_data = self.ffi.new("uint64_t[]", self._input_buffer)
         c_input_length = len(self._input_buffer)
